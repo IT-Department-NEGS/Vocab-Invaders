@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Vocab Invaders: Neon Citadel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background: #020617; color: #f8fafc; font-family: 'Courier New', Courier, monospace; touch-action: none; }
+        /* Canvas set to block to remove scrollbars */
+        canvas { display: block; } 
+        .ui-layer { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+        .interactive { pointer-events: auto; }
+        .neon-text { text-shadow: 0 0 10px #22d3ee; }
+        
+        .modal {
+            position: fixed; inset: 0; background: rgba(2, 6, 23, 0.95);
+            display: none; align-items: center; justify-content: center; z-index: 50; padding: 20px;
+        }
+        .modal.active { display: flex; pointer-events: auto; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); }
+        ::-webkit-scrollbar-thumb { background: #0ea5e9; border-radius: 10px; }
+        
+        /* Dashboard styling */
+        .dashboard-panel {
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(2, 6, 23, 1) 100%);
+            border-top: 2px solid #0891b2;
+            box-shadow: 0 -4px 20px rgba(8, 145, 178, 0.3);
+        }
+
+        /* Reading Phase Indicator */
+        .scanning-line {
+            height: 2px;
+            width: 100%;
+            background: #22d3ee;
+            position: absolute;
+            top: 0;
+            left: 0;
+            animation: scan 2s linear;
+            opacity: 0;
+        }
+        @keyframes scan {
+            0% { top: 0; opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="ui" class="ui-layer">
+        <!-- TOP HUD: Score & Hull -->
+        <div id="hud" class="hidden flex justify-between items-start p-4 w-full">
+            <div class="bg-slate-900/80 border border-cyan-900 p-2 rounded shadow-lg backdrop-blur-sm">
+                <div class="text-[10px] text-slate-500 uppercase tracking-widest">Score</div>
+                <div id="scoreDisplay" class="text-xl font-bold text-cyan-400 font-mono">00000</div>
+            </div>
+            
+            <div class="bg-slate-900/80 border border-cyan-900 p-2 rounded text-right shadow-lg backdrop-blur-sm">
+                <div class="text-[10px] text-slate-500 uppercase tracking-widest">Hull Integrity</div>
+                <div class="w-32 h-3 bg-slate-800 mt-1 rounded-full overflow-hidden border border-slate-700">
+                    <div id="healthFill" class="h-full bg-cyan-500 w-full transition-all duration-300"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- BOTTOM HUD: Definition Dashboard -->
+        <div id="bottomDashboard" class="hidden absolute bottom-0 left-0 w-full dashboard-panel p-4 pb-8 flex flex-col items-center justify-center text-center interactive">
+            <!-- Scanning Line Visual for Reading Phase -->
+            <div id="scanLine" class="scanning-line hidden"></div>
+
+            <div class="text-[10px] text-cyan-500 uppercase tracking-[0.2em] mb-1">Target Signature Detected</div>
+            <div id="targetDefinition" class="text-white text-lg md:text-xl font-bold italic leading-tight max-w-3xl drop-shadow-md">
+                Initializing System...
+            </div>
+            <!-- Mobile Controls Hint -->
+            <div class="md:hidden text-[9px] text-slate-600 mt-2 uppercase tracking-widest">Tap Left/Right to Move • Tap Center to Fire</div>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="startScreen" class="absolute inset-0 flex items-center justify-center interactive z-50 bg-slate-900/95">
+            <div class="border-2 border-cyan-500 p-8 rounded-lg text-center max-w-md w-full shadow-[0_0_30px_rgba(34,211,238,0.2)] bg-black/80">
+                <h1 class="text-4xl font-black text-cyan-400 mb-1 italic neon-text uppercase">Vocab Invaders</h1>
+                <p class="text-[10px] text-slate-400 mb-8 tracking-widest uppercase">Neon Citadel // Defense Initiative</p>
+                
+                <div class="space-y-4 mb-8">
+                    <div class="text-left">
+                        <label class="text-[10px] text-cyan-500 uppercase font-bold ml-1">Pilot Credentials</label>
+                        <input id="playerName" type="text" placeholder="First Name + Initial (e.g. JohnD)" class="w-full bg-slate-800 border border-slate-700 p-3 mt-1 rounded text-sm text-cyan-300 outline-none focus:border-cyan-500 font-mono">
+                    </div>
+                    <div class="text-left">
+                        <label class="text-[10px] text-cyan-500 uppercase font-bold ml-1">Sector Assignment</label>
+                        <input id="playerYear" type="text" placeholder="Year Group (e.g. Year 10)" class="w-full bg-slate-800 border border-slate-700 p-3 mt-1 rounded text-sm text-cyan-300 outline-none focus:border-cyan-500 font-mono">
+                    </div>
+                    
+                    <button onclick="startGame()" class="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-4 rounded transition-all transform active:scale-95 uppercase tracking-widest text-sm shadow-lg shadow-cyan-900/20">Engage Mission</button>
+                    
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="toggleModal('dictModal', true)" class="bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-900/50 py-3 rounded text-[10px] uppercase tracking-widest">Tactical DB</button>
+                        <button onclick="openLeaderboard()" class="bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-900/50 py-3 rounded text-[10px] uppercase tracking-widest">Rankings</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Over -->
+        <div id="gameOverScreen" class="hidden absolute inset-0 flex items-center justify-center interactive z-50 bg-red-950/90 backdrop-blur-sm">
+            <div class="border-2 border-red-500 p-10 rounded-lg text-center shadow-[0_0_50px_rgba(239,68,68,0.3)] bg-slate-900">
+                <h2 class="text-4xl font-black text-red-500 mb-4 uppercase italic tracking-tighter">Hull Critical</h2>
+                
+                <div class="bg-slate-950 p-4 rounded border border-red-900 mb-6">
+                    <p class="text-[10px] text-red-400 uppercase tracking-widest mb-1">Fatal Error Caused By</p>
+                    <p id="fatalWord" class="text-2xl font-bold text-white uppercase mb-1">WORD</p>
+                    <p id="fatalDef" class="text-xs text-slate-400 italic">"Definition"</p>
+                </div>
+
+                <div class="text-xl mb-6 font-mono text-slate-300">FINAL SCORE: <span id="finalScore" class="text-cyan-400 font-bold">0</span></div>
+                <p id="saveStatus" class="text-xs text-slate-500 mb-4 uppercase tracking-widest italic">Syncing with mainframe...</p>
+                <button onclick="location.reload()" class="w-full bg-slate-700 hover:bg-slate-600 text-white py-4 rounded font-bold uppercase tracking-widest transition-all">Manual Reboot</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="dictModal" class="modal">
+        <div class="bg-slate-900 border-2 border-cyan-500 p-6 rounded-lg max-w-2xl w-full max-h-[80vh] flex flex-col shadow-2xl">
+            <div class="flex justify-between items-center mb-4 border-b border-cyan-900 pb-2">
+                <h3 class="text-cyan-400 font-bold uppercase tracking-widest">Tactical Dictionary</h3>
+                <button onclick="toggleModal('dictModal', false)" class="text-slate-500 hover:text-white font-bold">✕ CLOSE</button>
+            </div>
+            <div id="termDatabase" class="overflow-y-auto pr-2 text-xs space-y-2 font-mono"></div>
+        </div>
+    </div>
+
+    <div id="leaderboardModal" class="modal">
+        <div class="bg-slate-900 border-2 border-cyan-500 p-6 rounded-lg max-w-lg w-full max-h-[80vh] flex flex-col shadow-2xl">
+            <div class="flex justify-between items-center mb-4 border-b border-cyan-900 pb-2">
+                <h3 class="text-cyan-400 font-bold uppercase tracking-widest">Global Rankings</h3>
+                <button onclick="toggleModal('leaderboardModal', false)" class="text-slate-500 hover:text-white font-bold">✕ CLOSE</button>
+            </div>
+            <div class="flex-1 overflow-y-auto custom-scrollbar bg-black/50 rounded border border-slate-800 p-2 min-h-[300px] relative">
+                <div id="loadingLeaderboard" class="absolute inset-0 flex items-center justify-center text-cyan-500 animate-pulse text-xs uppercase tracking-widest">Accessing Satellite Feed...</div>
+                <div id="leaderboardError" class="hidden absolute inset-0 flex flex-col items-center justify-center text-red-400 text-xs text-center p-4"><p class="mb-2 font-bold">CONNECTION FAILED</p></div>
+                <table id="leaderboardTable" class="w-full text-xs hidden font-mono">
+                    <thead class="text-slate-500 border-b border-slate-800 uppercase tracking-tighter">
+                        <tr><th class="p-2 text-left">AGENT</th><th class="p-2 text-center">SECTOR</th><th class="p-2 text-right">SCORE</th></tr>
+                    </thead>
+                    <tbody id="leaderboardBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwmCXjNiauQNEQTooxm794EVRNKz73iwviqT_rVnxGH6UWl4_T3VUYQJwZs8JYfSxE/exec";
+
+        const MASTER_VOCAB = [
+            { word: "aberration", def: "A state or condition markedly different from the norm" },
+            { word: "acquiesce", def: "Agree or express agreement without protest" },
+            { word: "alacrity", def: "Liveliness and eagerness" },
+            { word: "amiable", def: "Diffusing warmth and friendliness" },
+            { word: "appease", def: "Make peace with or calm someone down" },
+            { word: "arcane", def: "Requiring secret or mysterious knowledge" },
+            { word: "avarice", def: "Extreme greed for material wealth" },
+            { word: "brazen", def: "Unrestrained by convention or propriety" },
+            { word: "brusque", def: "Rudely abrupt or blunt in speech or manner" },
+            { word: "cajole", def: "Influence or urge by gentle flattering" },
+            { word: "callous", def: "Emotionally hardened; unfeeling" },
+            { word: "candor", def: "The quality of being honest and straightforward" },
+            { word: "chide", def: "Scold or reprimand severely or angrily" },
+            { word: "circumspect", def: "Careful to consider potential consequences and avoid risk" },
+            { word: "coerce", def: "Cause to do through pressure or necessity" },
+            { word: "coherent", def: "Marked by an orderly and consistent relation of parts" },
+            { word: "connive", def: "Form intrigues in an underhand manner; conspire" },
+            { word: "cumulative", def: "Increasing by successive addition" },
+            { word: "debase", def: "Corrupt morally or by intemperance or sensuality" },
+            { word: "decry", def: "Express strong disapproval of" },
+            { word: "deferential", def: "Showing courteous regard for people's feelings" },
+            { word: "demure", def: "Shy or modest, often in a playful or provocative way" },
+            { word: "deride", def: "Treat or speak of with contempt" },
+            { word: "despot", def: "A cruel and oppressive dictator" },
+            { word: "diligent", def: "Quietly and steadily persevering in detail or exactness" },
+            { word: "elated", def: "Exultantly proud and joyful; in high spirits" },
+            { word: "eloquent", def: "Expressing yourself readily, clearly, effectively" },
+            { word: "embezzle", def: "Appropriate fraudulently to one's own use" },
+            { word: "empathy", def: "Understanding and entering into another's feelings" },
+            { word: "enmity", def: "A state of deep-seated ill-will" },
+            { word: "erudite", def: "Having or showing profound knowledge" },
+            { word: "extol", def: "Praise, glorify, or honor" },
+            { word: "fabricate", def: "Make up something artificial or untrue" },
+            { word: "flabbergasted", def: "Struck dumb with astonishment and surprise" },
+            { word: "forsake", def: "Leave someone who needs or counts on you" },
+            { word: "furtive", def: "Secret and sly or sordid" },
+            { word: "gluttony", def: "Habitual eating to excess" },
+            { word: "gratuitous", def: "Unnecessary and unwarranted" },
+            { word: "haughty", def: "Having or showing arrogant superiority" },
+            { word: "hypocrisy", def: "Pretending to have qualities or beliefs that you do not have" },
+            { word: "impeccable", def: "Without error or flaw" },
+            { word: "impertinent", def: "Improperly forward or bold" },
+            { word: "indolent", def: "Disinclined to work or exertion; lazy" },
+            { word: "inept", def: "Generally incompetent and ineffectual" },
+            { word: "infamy", def: "A state of extreme dishonor" },
+            { word: "inhibit", def: "Limit the range or extent of" },
+            { word: "innate", def: "Present at birth but not necessarily hereditary" },
+            { word: "insatiable", def: "Impossible to fulfill, appease, or gratify" },
+            { word: "insular", def: "Narrowly restricted in outlook or scope" },
+            { word: "intrepid", def: "Invulnerable to fear or intimidation" },
+            { word: "abject", def: "Of the most contemptible kind; miserable" },
+            { word: "abjure", def: "Formally reject or disavow a formerly held belief" },
+            { word: "abstruse", def: "Difficult to understand; obscure" },
+            { word: "acumen", def: "Shrewdness shown by keen insight" },
+            { word: "adamant", def: "Impervious to pleas, persuasion, requests, or reason" },
+            { word: "admonish", def: "Scold or reprimand; take to task" },
+            { word: "adumbrate", def: "Describe roughly or give the main points or summary of" },
+            { word: "advocate", def: "A person who pleads for a person, cause, or idea" },
+            { word: "affluent", def: "Having an abundant supply of money or possessions" },
+            { word: "aggrandize", def: "Add details to; exaggerate or increase power" },
+            { word: "anomaly", def: "Something that deviates from what is standard or expected" },
+            { word: "arduous", def: "Involving a lot of effort and hard work" },
+            { word: "benign", def: "Harmless; kind and gentle" },
+            { word: "bolster", def: "To support or strengthen" },
+            { word: "capricious", def: "Given to sudden and unaccountable changes of mood" },
+            { word: "catalyst", def: "An agent that provokes or speeds significant change" },
+            { word: "clinch", def: "To confirm or settle something definitively" },
+            { word: "cognizant", def: "Being aware of or having knowledge of something" },
+            { word: "condone", def: "To accept or allow behavior that is considered wrong" },
+            { word: "confound", def: "To cause surprise or confusion in someone" },
+            { word: "conspicuous", def: "Easily noticeable or attracting attention" },
+            { word: "construe", def: "To interpret or understand the meaning of something" },
+            { word: "convoluted", def: "Extremely complex and difficult to follow" },
+            { word: "copious", def: "Abundant in supply or quantity" },
+            { word: "corroborate", def: "To confirm or give support to a statement" },
+            { word: "debilitate", def: "To make someone weak and infirm" },
+            { word: "debunk", def: "To expose the falseness of a myth or belief" },
+            { word: "dissonance", def: "Lack of harmony; clash of conflicting ideas" },
+            { word: "docile", def: "Ready to accept control; submissive" },
+            { word: "embellish", def: "To make something more attractive by adding details" },
+            { word: "enigma", def: "A person or thing that is mysterious or puzzling" },
+            { word: "esoteric", def: "Intended for only a small number of people with specialized knowledge" },
+            { word: "eulogy", def: "A speech that praises someone highly, typically one who has died" },
+            { word: "exacerbate", def: "To make a problem or situation worse" },
+            { word: "exemplary", def: "Serving as a desirable model; representing the best" },
+            { word: "expedient", def: "Convenient and practical, although possibly improper" },
+            { word: "finesse", def: "Skillful handling of a situation" },
+            { word: "fluctuate", def: "To change continually; move up and down" },
+            { word: "frivolous", def: "Not having any serious purpose or value" },
+            { word: "garner", def: "To gather or collect something" },
+            { word: "idiosyncrasy", def: "A distinctive or peculiar feature or characteristic" },
+            { word: "immutable", def: "Unchanging over time or unable to be changed" },
+            { word: "impediment", def: "A hindrance or obstruction in doing something" },
+            { word: "impervious", def: "Not allowing fluid to pass through; unable to be affected" },
+            { word: "incongruous", def: "Not in harmony or keeping with the surroundings" },
+            { word: "ingenious", def: "Clever, original, and inventive" },
+            { word: "innocuous", def: "Not harmful or offensive" },
+            { word: "insidious", def: "Proceeding in a subtle way but with harmful effects" },
+            { word: "juncture", def: "A particular point in events or time" },
+            { word: "juxtapose", def: "To place side by side for comparison" },
+            { word: "laudable", def: "Deserving praise and commendation" },
+            { word: "lethargic", def: "Sluggish and apathetic" },
+            { word: "mitigate", def: "To make something less severe, serious, or painful" },
+            { word: "myopic", def: "Lacking imagination, foresight, or intellectual insight" },
+            { word: "nascent", def: "Just coming into existence and displaying future potential" },
+            { word: "nuance", def: "A subtle difference in meaning, expression, or sound" },
+            { word: "obfuscate", def: "To deliberately make something unclear" },
+            { word: "obstinate", def: "Stubbornly refusing to change one's opinion" },
+            { word: "onerous", def: "Involving a lot of effort and difficulty; burdensome" },
+            { word: "placate", def: "To make someone less angry or hostile" },
+            { word: "plausible", def: "Seeming reasonable or probable" },
+            { word: "polarizing", def: "Causing strong division into opposing groups" },
+            { word: "pragmatic", def: "Dealing with things in a practical way" },
+            { word: "precarious", def: "Not securely held; dangerously likely to fall" },
+            { word: "precursor", def: "A person or thing that comes before another of the same kind" },
+            { word: "presumptuous", def: "Failing to observe the limits of what is permitted" },
+            { word: "pristine", def: "In its original condition; unspoiled" },
+            { word: "prolific", def: "Producing a lot of something; very productive" },
+            { word: "quintessential", def: "Representing the most perfect or typical example" },
+            { word: "redundant", def: "Not or no longer needed or useful" },
+            { word: "reticent", def: "Not revealing one's thoughts or feelings readily" },
+            { word: "rudimentary", def: "Basic or elementary; not advanced" },
+            { word: "scrupulous", def: "Very concerned to avoid doing wrong; diligent" },
+            { word: "subside", def: "To become less intense, violent, or severe" },
+            { word: "succinct", def: "Briefly and clearly expressed" },
+            { word: "surmise", def: "To suppose that something is true without evidence" },
+            { word: "tangential", def: "Diverging from the main point" },
+            { word: "tantamount", def: "Equivalent in seriousness to" },
+            { word: "ubiquitous", def: "Present, appearing, or found everywhere" },
+            { word: "unconscionable", def: "Not guided by conscience; shockingly unfair" },
+            { word: "undermine", def: "To weaken or damage something gradually" },
+            { word: "volatile", def: "Subject to rapid or unpredictable change" },
+            { word: "abeyance", def: "Temporary suspension or inactivity" },
+            { word: "abjure", def: "Solemnly renounce a belief, cause, or claim" },
+            { word: "absolution", def: "Formal release from guilt, obligation, or punishment" },
+            { word: "accentuate", def: "Make more noticeable or prominent" },
+            { word: "accost", def: "Approach and address someone boldly or aggressively" },
+            { word: "acerbic", def: "Sharp and forthright, especially in style of speaking" },
+            { word: "acrimony", def: "Bitterness or ill feeling" },
+            { word: "adroit", def: "Clever or skillful in using the hands or mind" },
+            { word: "adulation", def: "Excessive admiration or praise" },
+            { word: "aesthetic", def: "Concerned with beauty or the appreciation of beauty" },
+            { word: "affable", def: "Friendly, good-natured, or easy to talk to" },
+            { word: "agnostic", def: "A person who believes that nothing is known of the existence of God" },
+            { word: "alleviate", def: "Make suffering or a problem less severe" },
+            { word: "altruism", def: "Disinterested and selfless concern for the well-being of others" },
+            { word: "ambiguous", def: "Open to more than one interpretation; not clear" },
+            { word: "ambivalence", def: "State of having mixed feelings or contradictory ideas" },
+            { word: "ameliorate", def: "Make something bad or unsatisfactory better" },
+            { word: "amenable", def: "Open and responsive to suggestion; easily persuaded" },
+            { word: "anachronism", def: "A thing belonging or appropriate to a period other than that in which it exists" },
+            { word: "analogous", def: "Comparable in certain respects, typically in a way which makes clearer the nature of the things compared" },
+            { word: "anathema", def: "Something or someone that one vehemently dislikes" },
+            { word: "animosity", def: "Strong hostility" },
+            { word: "antagonism", def: "Active hostility or opposition" },
+            { word: "antediluvian", def: "Ridiculously old-fashioned; before the biblical flood" },
+            { word: "antithesis", def: "A person or thing that is the direct opposite of someone or something else" },
+            { word: "apathy", def: "Lack of interest, enthusiasm, or concern" },
+            { word: "aphorism", def: "A pithy observation that contains a general truth" },
+            { word: "apocryphal", def: "Of doubtful authenticity, although widely circulated as being true" },
+            { word: "apostatize", def: "To abandon one's religious or political beliefs" },
+            { word: "approbation", def: "Approval or praise" },
+            { word: "arbitrary", def: "Based on random choice or personal whim, rather than any reason" },
+            { word: "archaic", def: "Very old or old-fashioned" },
+            { word: "archetype", def: "A very typical example of a certain person or thing" },
+            { word: "arrogate", def: "Take or claim something without justification" },
+            { word: "ascetic", def: "Characterized by the practice of severe self-discipline" },
+            { word: "asperity", def: "Harshness of tone or manner" },
+            { word: "assiduous", def: "Showing great care and perseverance" },
+            { word: "assuage", def: "Make an unpleasant feeling less intense" },
+            { word: "astute", def: "Having or showing an ability to accurately assess situations" },
+            { word: "atrophy", def: "To waste away from lack of use" },
+            { word: "audacious", def: "Showing a willingness to take surprisingly bold risks" },
+            { word: "augment", def: "Make something greater by adding to it" },
+            { word: "augury", def: "A sign of what will happen in the future; an omen" },
+            { word: "austere", def: "Severe or strict in manner, attitude, or appearance" },
+            { word: "autonomy", def: "The right or condition of self-government" },
+            { word: "axiom", def: "A statement or proposition which is regarded as being established" },
+            { word: "baleful", def: "Threatening harm; menacing" },
+            { word: "banal", def: "So lacking in originality as to be obvious and boring" },
+            { word: "bellicose", def: "Demonstrating aggression and willingness to fight" },
+            { word: "belligerent", def: "Hostile and aggressive" },
+            { word: "benevolent", def: "Well meaning and kindly" },
+            { word: "berate", def: "Scold or criticize someone angrily" },
+            { word: "bereft", def: "Deprived of or lacking something" },
+            { word: "bilk", def: "Obtain or withhold money from someone by deceit" },
+            { word: "bombastic", def: "High-sounding but with little meaning; inflated" },
+            { word: "boorish", def: "Rough and bad-mannered; coarse" },
+            { word: "burgeon", def: "Begin to grow or increase rapidly; flourish" },
+            { word: "cacophony", def: "A harsh discordant mixture of sounds" },
+            { word: "cadence", def: "A modulation or inflection of the voice" },
+            { word: "calumny", def: "The making of false and defamatory statements about someone" },
+            { word: "canard", def: "An unfounded rumor or story" },
+            { word: "cantankerous", def: "Bad-tempered, argumentative, and uncooperative" },
+            { word: "capitulate", def: "Cease to resist an opponent or an unwelcome demand" },
+            { word: "captious", def: "Tending to find fault or raise petty objections" },
+            { word: "castigate", def: "Reprimand someone severely" },
+            { word: "catharsis", def: "The process of releasing strong or repressed emotions" },
+            { word: "caustic", def: "Sarcastic in a scathing and bitter way" },
+            { word: "censure", def: "Express severe disapproval of someone or something" },
+            { word: "cerebral", def: "Intellectual rather than emotional or physical" },
+            { word: "chagrin", def: "Distress or embarrassment at having failed or been humiliated" },
+            { word: "charlatan", def: "A person falsely claiming to have a special knowledge or skill" },
+            { word: "chasm", def: "A deep fissure in the earth; a profound difference between people" },
+            { word: "chicanery", def: "The use of trickery to achieve a political, financial, or legal purpose" },
+            { word: "chimerical", def: "Hoped for but illusory or impossible to achieve" },
+            { word: "choleric", def: "Bad-tempered or irritable" },
+            { word: "clandestine", def: "Kept secret or done secretively" },
+            { word: "clemency", def: "Mercy; lenience" },
+            { word: "cogent", def: "Clear, logical, and convincing" },
+            { word: "collusion", def: "Secret or illegal cooperation or conspiracy" },
+            { word: "commensurate", def: "Corresponding in size or degree; in proportion" },
+            { word: "compendium", def: "A collection of concise but detailed information about a subject" },
+            { word: "complaisant", def: "Willing to please others; obliging" },
+            { word: "compunction", def: "A feeling of guilt that prevents or follows the doing of something bad" },
+            { word: "conciliatory", def: "Intended or likely to placate or pacify" },
+            { word: "concomitant", def: "Naturally accompanying or associated" },
+            { word: "conflagration", def: "An extensive fire which destroys a great deal of land or property" },
+            { word: "confluence", def: "The junction of two rivers; a coming together of people or things" },
+            { word: "congenital", def: "Present from birth" },
+            { word: "conjecture", def: "An opinion or conclusion formed on the basis of incomplete information" },
+            { word: "connoisseur", def: "An expert judge in matters of taste" },
+            { word: "consecrate", def: "Make or declare sacred" },
+            { word: "contentious", def: "Causing or likely to cause an argument; controversial" },
+            { word: "contingent", def: "Subject to chance" },
+            { word: "contrite", def: "Feeling or expressing remorse or penitence" },
+            { word: "conundrum", def: "A confusing and difficult problem or question" },
+            { word: "convivial", def: "Friendly, lively, and enjoyable" },
+            { word: "corpulent", def: "Fat or overweight" },
+            { word: "cosmopolitan", def: "Familiar with and at ease in many different countries and cultures" },
+            { word: "covenant", def: "An agreement" },
+            { word: "credulity", def: "A tendency to be too ready to believe that something is real or true" },
+            { word: "culpable", def: "Deserving blame" },
+            { word: "cursory", def: "Hasty and therefore not thorough or detailed" },
+            { word: "cynic", def: "A person who believes that people are motivated purely by self-interest" },
+            { word: "dearth", def: "A scarcity or lack of something" },
+            { word: "decorum", def: "Behavior in keeping with good taste and propriety" },
+            { word: "defile", def: "Sully, mar, or spoil" },
+            { word: "deft", def: "Neatly skillful and quick in one's movements" },
+            { word: "deleterious", def: "Causing harm or damage" },
+            { word: "demagogue", def: "A political leader who seeks support by appealing to popular desires" },
+            { word: "denigrate", def: "Criticize unfairly; disparage" },
+            { word: "depravity", def: "Moral corruption; wickedness" },
+            { word: "derelict", def: "In a very poor condition as a result of disuse and neglect" },
+            { word: "derogatory", def: "Showing a critical or disrespectful attitude" },
+            { word: "desiccated", def: "Lacking interest, passion, or energy" },
+            { word: "despondent", def: "In low spirits from loss of hope or courage" },
+            { word: "desultory", def: "Lacking a plan, purpose, or enthusiasm" },
+            { word: "diatribe", def: "A forceful and bitter verbal attack against someone or something" },
+            { word: "dichotomy", def: "A division or contrast between two things that are represented as being opposed" },
+            { word: "didactic", def: "Intended to teach, particularly in having moral instruction" },
+            { word: "diffident", def: "Modest or shy because of a lack of self-confidence" },
+            { word: "digression", def: "A temporary departure from the main subject in speech or writing" },
+            { word: "din", def: "A loud, unpleasant, and prolonged noise" },
+            { word: "disabuse", def: "Persuade someone that an idea or belief is mistaken" },
+            { word: "discern", def: "Perceive or recognize" },
+            { word: "discomfit", def: "Make someone feel uneasy or embarrassed" },
+            { word: "disparate", def: "Essentially different in kind; not allowing comparison" },
+            { word: "dispel", def: "Make a doubt, feeling, or belief disappear" },
+            { word: "disseminate", def: "Spread or disperse widely" },
+            { word: "dogmatic", def: "Inclined to lay down principles as undeniably true" },
+            { word: "dormant", def: "Having normal physical functions suspended or slowed down for a period" },
+            { word: "duplicity", def: "Deceitfulness; double-dealing" },
+            { word: "ebullient", def: "Cheerful and full of energy" },
+            { word: "eclectic", def: "Deriving ideas, style, or taste from a broad and diverse range of sources" },
+            { word: "edifice", def: "A building, especially a large, imposing one" },
+            { word: "efface", def: "Erase a mark from a surface" },
+            { word: "effervescent", def: "Vivacious and enthusiastic" },
+            { word: "efficacious", def: "Successful in producing a desired or intended result" },
+            { word: "effrontery", def: "Insolent or impertinent behavior" },
+            { word: "egregious", def: "Outstandingly bad; shocking" },
+            { word: "elicit", def: "Evoke or draw out a response from someone" },
+            { word: "elucidate", def: "Make something clear; explain" },
+            { word: "emaciated", def: "Abnormally thin or weak" },
+            { word: "eminent", def: "Famous and respected within a particular sphere or profession" },
+            { word: "emollient", def: "Attempting to avoid confrontation or anger; soothing" },
+            { word: "empirical", def: "Based on observation or experience rather than theory or pure logic" },
+            { word: "emulate", def: "Match or surpass a person or achievement, typically by imitation" },
+            { word: "enervate", def: "Cause someone to feel drained of energy or vitality" },
+            { word: "engender", def: "Cause or give rise to a feeling, situation, or condition" },
+            { word: "ephemeral", def: "Lasting for a very short time" },
+            { word: "epitome", def: "A person or thing that is a perfect example of a particular quality or type" },
+            { word: "equanimity", def: "Mental calmness, composure, and evenness of temper" },
+            { word: "equivocal", def: "Open to more than one interpretation; ambiguous" },
+            { word: "evanescent", def: "Soon passing out of sight, memory, or existence; quickly fading" },
+            { word: "evince", def: "Reveal the presence of a quality or feeling" },
+            { word: "exalt", def: "Hold someone or something in very high regard" },
+            { word: "exasperate", def: "Irritate and frustrate someone intensely" },
+            { word: "excoriate", def: "Censure or criticize severely" },
+            { word: "exculpate", def: "Show or declare that someone is not guilty of wrongdoing" },
+            { word: "execrable", def: "Extremely bad or unpleasant" },
+            { word: "exegesis", def: "Critical explanation or interpretation of a text" },
+            { word: "exhort", def: "Strongly encourage or urge someone to do something" },
+            { word: "exigent", def: "Pressing; demanding" },
+            { word: "exonerate", def: "Absolve someone from blame for a fault or wrongdoing" },
+            { word: "expatriate", def: "A person who lives outside their native country" },
+            { word: "expiate", def: "Atone for guilt or sin" },
+            { word: "explicate", def: "Analyze and develop an idea or principle in detail" },
+            { word: "expunge", def: "Obliterate or remove completely" },
+            { word: "extant", def: "Still in existence; surviving" },
+            { word: "extenuate", def: "Make guilt or an offense seem less serious or more forgivable" },
+            { word: "extirpate", def: "Root out and destroy completely" },
+            { word: "extraneous", def: "Irrelevant or unrelated to the subject being dealt with" },
+            { word: "extricate", def: "Free someone or something from a constraint or difficulty" },
+            { word: "exult", def: "Show or feel elation or jubilation" },
+            { word: "facetious", def: "Treating serious issues with deliberately inappropriate humor" },
+            { word: "fallacious", def: "Based on a mistaken belief" },
+            { word: "fastidious", def: "Very attentive to and concerned about accuracy and detail" },
+            { word: "fatuous", def: "Silly and pointless" },
+            { word: "fawn", def: "Display exaggerated flattery or affection" },
+            { word: "feckless", def: "Lacking initiative or strength of character; irresponsible" },
+            { word: "fecund", def: "Producing or capable of producing an abundance of offspring" },
+            { word: "felicitous", def: "Well chosen or suited to the circumstances" },
+            { word: "feral", def: "In a wild state, especially after escape from captivity" },
+            { word: "fervent", def: "Having or displaying a passionate intensity" },
+            { word: "fetid", def: "Smelling extremely unpleasant" },
+            { word: "fetter", def: "Restrain with chains or manacles; a restraint" },
+            { word: "fiat", def: "A formal authorization or proposition; a decree" },
+            { word: "fidelity", def: "Faithfulness to a person, cause, or belief" },
+            { word: "flagrant", def: "Conspicuously or obviously offensive" },
+            { word: "florid", def: "Using unusual words or complicated rhetorical constructions" },
+            { word: "flout", def: "Openly disregard a rule, law or convention" },
+            { word: "foment", def: "Instigate or stir up an undesirable or violent sentiment" },
+            { word: "forbearance", def: "Patient self-control; restraint and tolerance" },
+            { word: "fortitude", def: "Courage in pain or adversity" },
+            { word: "fortuitous", def: "Happening by a lucky chance; fortunate" },
+            { word: "fractious", def: "Irritable and quarrelsome" },
+            { word: "frenetic", def: "Fast and energetic in a rather wild and uncontrolled way" },
+            { word: "fulsome", def: "Complimentary or flattering to an excessive degree" },
+            { word: "gainsay", def: "Deny or contradict a fact or statement" },
+            { word: "garrulous", def: "Excessively talkative, especially on trivial matters" },
+            { word: "genial", def: "Friendly and cheerful" },
+            { word: "germane", def: "Relevant to a subject under consideration" },
+            { word: "glib", def: "Fluent and voluble but insincere and shallow" },
+            { word: "gossamer", def: "Used to refer to something very light, thin, and insubstantial" },
+            { word: "grandiloquence", def: "Pompous or extravagant in language, style, or manner" },
+            { word: "gregarious", def: "Fond of company; sociable" },
+            { word: "guile", def: "Sly or cunning intelligence" },
+            { word: "hackneyed", def: "Lacking significance through having been overused" },
+            { word: "halcyon", def: "Denoting a period of time in the past that was idyllically happy and peaceful" },
+            { word: "hapless", def: "Unfortunate" },
+            { word: "harangue", def: "A lengthy and aggressive speech" },
+            { word: "harbinger", def: "A person or thing that announces or signals the approach of another" },
+            { word: "hedonism", def: "The pursuit of pleasure; sensual self-indulgence" },
+            { word: "hegemony", def: "Leadership or dominance, especially by one country or social group over others" },
+            { word: "heresy", def: "Belief or opinion contrary to orthodox religious doctrine" },
+            { word: "hermetic", def: "Insulated or protected from outside influences" },
+            { word: "heterogeneous", def: "Diverse in character or content" },
+            { word: "hiatus", def: "A pause or gap in a sequence, series, or process" },
+            { word: "histrionic", def: "Overly theatrical or melodramatic in character or style" },
+            { word: "homage", def: "Special honor or respect shown publicly" },
+            { word: "hubris", def: "Excessive pride or self-confidence" },
+            { word: "iconoclast", def: "A person who attacks cherished beliefs or institutions" },
+            { word: "imbue", def: "Inspire or permeate with a feeling or quality" },
+            { word: "imminent", def: "About to happen" },
+            { word: "impassive", def: "Not feeling or showing emotion" },
+            { word: "impeccable", def: "Of the highest standards; faultless" },
+            { word: "impecunious", def: "Having little or no money" },
+            { word: "imperious", def: "Assuming power or authority without justification" },
+            { word: "impetuous", def: "Acting or done quickly and without thought or care" },
+            { word: "impinge", def: "Have an effect or impact, especially a negative one" },
+            { word: "implacable", def: "Relentless; unstoppable" },
+            { word: "implausible", def: "Not seeming reasonable or probable" },
+            { word: "implicate", def: "Show someone to be involved in a crime" },
+            { word: "imply", def: "Strongly suggest the truth or existence of something not expressly stated" },
+            { word: "importune", def: "Harass someone persistently for or to do something" },
+            { word: "impunity", def: "Exemption from punishment or freedom from the injurious consequences of an action" },
+            { word: "inane", def: "Silly; stupid" },
+            { word: "incendiary", def: "Designed to cause fires; tending to stir up conflict" },
+            { word: "inchoate", def: "Just begun and so not fully formed or developed" },
+            { word: "incisive", def: "Intelligently analytical and clear-thinking" },
+            { word: "incite", def: "Encourage or stir up violent or unlawful behavior" },
+            { word: "inclement", def: "Unpleasantly cold or wet weather" },
+            { word: "incontinent", def: "Lacking self-restraint; uncontrolled" },
+            { word: "incumbent", def: "Necessary for someone as a duty or responsibility" },
+            { word: "indefatigable", def: "Persisting tirelessly" },
+            { word: "indigent", def: "Poor; needy" },
+            { word: "indignation", def: "Anger or annoyance provoked by what is perceived as unfair treatment" },
+            { word: "indomitable", def: "Impossible to subdue or defeat" },
+            { word: "indubitable", def: "Impossible to doubt; unquestionable" },
+            { word: "ineffable", def: "Too great or extreme to be expressed or described in words" },
+            { word: "ineluctable", def: "Unable to be resisted or avoided; inescapable" },
+            { word: "inexorable", def: "Impossible to stop or prevent" },
+            { word: "ingenious", def: "Clever, original, and inventive" },
+            { word: "ingenuous", def: "Innocent and unsuspecting" },
+            { word: "ingratiate", def: "Bring oneself into favor with someone by flattering or trying to please them" },
+            { word: "inherent", def: "Existing in something as a permanent, essential, or characteristic attribute" },
+            { word: "inimical", def: "Tending to obstruct or harm" },
+            { word: "iniquity", def: "Immoral or grossly unfair behavior" },
+            { word: "innocuous", def: "Not harmful or offensive" },
+            { word: "inscrutable", def: "Impossible to understand or interpret" },
+            { word: "insidious", def: "Proceeding in a gradual, subtle way, but with harmful effects" },
+            { word: "insipid", def: "Lacking flavor or vigor; dull" },
+            { word: "insolent", def: "Showing a rude and arrogant lack of respect" },
+            { word: "instigate", def: "Bring about or initiate" },
+            { word: "insurgent", def: "Rising in active revolt" },
+            { word: "intransigent", def: "Unwilling or refusing to change one's views" },
+            { word: "inundate", def: "Overwhelm someone with things or people to be dealt with" },
+            { word: "inure", def: "Accustom someone to something, especially something unpleasant" },
+            { word: "invective", def: "Insulting, abusive, or highly critical language" },
+            { word: "inveterate", def: "Having a particular habit, activity, or interest that is long-established" },
+            { word: "invidious", def: "Likely to arouse or incur resentment or anger in others" },
+            { word: "irascible", def: "Having or showing a tendency to be easily angered" },
+            { word: "itinerant", def: "Traveling from place to place" },
+            { word: "jettison", def: "Abandon or discard someone or something that is no longer wanted" },
+            { word: "jocular", def: "Fond of or characterized by joking; humorous or playful" },
+            { word: "judicious", def: "Having, showing, or done with good judgment or sense" },
+            { word: "juxtaposition", def: "The fact of two things being seen or placed close together with contrasting effect" },
+            { word: "knell", def: "The sound of a bell, especially when rung solemnly for a death or funeral" },
+            { word: "laconic", def: "Using very few words" },
+            { word: "lament", def: "A passionate expression of grief or sorrow" },
+            { word: "lampoon", def: "Publicly criticize someone or something by using ridicule, irony, or sarcasm" },
+            { word: "languid", def: "Displaying or having a disinclination for physical exertion or effort" },
+            { word: "larceny", def: "Theft of personal property" },
+            { word: "largess", def: "Generosity in bestowing money or gifts upon others" },
+            { word: "latent", def: "Existing but not yet developed or manifest; hidden or concealed" },
+            { word: "lavish", def: "Sumptuously rich, elaborate, or luxurious" },
+            { word: "legerdemain", def: "Skillful use of one's hands when performing conjuring tricks" },
+            { word: "levity", def: "Humor or frivolity, especially the treatment of a serious matter with humor" },
+            { word: "libertarian", def: "A person who believes in free will" },
+            { word: "licentious", def: "Promiscuous and unprincipled in sexual matters" },
+            { word: "limpid", def: "Completely clear and transparent" },
+            { word: "linchpin", def: "A person or thing vital to an enterprise or organization" },
+            { word: "lithe", def: "Thin, supple, and graceful" },
+            { word: "loquacious", def: "Tending to talk a great deal; talkative" },
+            { word: "lucid", def: "Expressed clearly; easy to understand" },
+            { word: "luminous", def: "Full of or shedding light; bright or shining" },
+            { word: "machination", def: "A plot or scheme" },
+            { word: "magnanimous", def: "Generous or forgiving, especially toward a rival or less powerful person" },
+            { word: "malediction", def: "A magical word or phrase uttered with the intention of bringing about evil" },
+            { word: "malevolent", def: "Having or showing a wish to do evil to others" },
+            { word: "malleable", def: "Easily influenced; pliable" },
+            { word: "mandate", def: "An official order or commission to do something" },
+            { word: "manifest", def: "Clear or obvious to the eye or mind" },
+            { word: "manifold", def: "Many and various" },
+            { word: "maudlin", def: "Self-pitying or tearfully sentimental" },
+            { word: "maverick", def: "An unorthodox or independent-minded person" },
+            { word: "mawkish", def: "Sentimental in a feeble or sickly way" },
+            { word: "maxim", def: "A short, pithy statement expressing a general truth or rule of conduct" },
+            { word: "mendacious", def: "Not telling the truth; lying" },
+            { word: "mercurial", def: "Subject to sudden or unpredictable changes of mood or mind" },
+            { word: "meretricious", def: "Apparently attractive but having in reality no value or integrity" },
+            { word: "meticulous", def: "Showing great attention to detail; very careful and precise" },
+            { word: "modicum", def: "A small quantity of a particular thing" },
+            { word: "mollify", def: "Appease the anger or anxiety of someone" },
+            { word: "morose", def: "Sullen and ill-tempered" },
+            { word: "multifarious", def: "Many and of various types" },
+            { word: "munificent", def: "Larger or more generous than is usual or necessary" },
+            { word: "myriad", def: "A countless or extremely great number" }
+        ];
+
+        // Game State
+        let GAME_RUNNING = false;
+        let SPAWNING_WAVE = false;
+        let SCORE = 0;
+        let HEALTH = 100;
+        let STREAK = 0; // New Streak Counter
+        let TARGET_WORD = null;
+        let PLAYER_X = 0;
+        let PLAYER_Y = 0;
+        const BULLETS = [];
+        const ENEMIES = [];
+        const PARTICLES = [];
+        const FLOATING_TEXTS = []; // For damage/heal numbers
+        const KEYS = {};
+
+        function init() {
+            resize();
+            populateDatabase();
+            window.addEventListener('resize', resize);
+            window.addEventListener('keydown', e => KEYS[e.code] = true);
+            window.addEventListener('keyup', e => KEYS[e.code] = false);
+            // Touch Controls
+            canvas.addEventListener('touchstart', handleTouch);
+            canvas.addEventListener('touchmove', handleTouch);
+            canvas.addEventListener('touchend', () => KEYS['Space'] = false);
+        }
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            // Ship positioned just above the bottom dashboard (approx 150px space reserved)
+            PLAYER_X = canvas.width / 2;
+            PLAYER_Y = canvas.height - 180; 
+        }
+
+        function handleTouch(e) {
+            if (!GAME_RUNNING) return;
+            e.preventDefault();
+            const touch = e.touches[0];
+            PLAYER_X = touch.clientX;
+            // Auto fire on touch move
+            if (Date.now() - lastShot > 300) {
+                shoot();
+                lastShot = Date.now();
+            }
+        }
+
+        function populateDatabase() {
+            const dbEl = document.getElementById('termDatabase');
+            dbEl.innerHTML = MASTER_VOCAB.map(v => `
+                <div class="border-b border-slate-800 pb-2 mb-2">
+                    <span class="text-cyan-400 font-bold uppercase block">${v.word}</span>
+                    <span class="text-slate-400">${v.def}</span>
+                </div>
+            `).join('');
+        }
+
+        function openLeaderboard() {
+            toggleModal('leaderboardModal', true);
+            loadLeaderboard();
+        }
+
+        function toggleModal(id, show) {
+            const modal = document.getElementById(id);
+            if (show) {
+                modal.classList.add('active');
+            } else {
+                modal.classList.remove('active');
+            }
+        }
+
+        function loadLeaderboard() {
+            const loading = document.getElementById('loadingLeaderboard');
+            const error = document.getElementById('leaderboardError');
+            const table = document.getElementById('leaderboardTable');
+            const tbody = document.getElementById('leaderboardBody');
+
+            loading.style.display = 'flex';
+            error.classList.add('hidden');
+            table.classList.add('hidden');
+
+            const callbackName = 'jsonp_leaderboard_' + Math.round(100000 * Math.random());
+            window[callbackName] = (data) => {
+                delete window[callbackName];
+                document.body.removeChild(script);
+                loading.style.display = 'none';
+                
+                if (!data || data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" class="text-center p-4 text-slate-500">No Data Found</td></tr>';
+                } else {
+                    // 1. Sort by score descending (ensure highest is first)
+                    data.sort((a, b) => b.score - a.score);
+
+                    // 2. Filter unique names
+                    const uniqueData = [];
+                    const seenNames = new Set();
+
+                    for (const entry of data) {
+                        const nameKey = (entry.name || "").trim().toLowerCase();
+                        if (nameKey && !seenNames.has(nameKey)) {
+                            seenNames.add(nameKey);
+                            uniqueData.push(entry);
+                        }
+                    }
+
+                    // 3. Render Top Results
+                    tbody.innerHTML = uniqueData.map((entry) => `
+                        <tr class="border-b border-slate-800 text-sm hover:bg-slate-800/50">
+                            <td class="p-2 text-cyan-300 font-bold">${entry.name}</td>
+                            <td class="p-2 text-center text-slate-400">${entry.year}</td>
+                            <td class="p-2 text-right font-bold text-white">${entry.score}</td>
+                        </tr>
+                    `).join('');
+                }
+                table.classList.remove('hidden');
+            };
+
+            const script = document.createElement('script');
+            script.src = `${GOOGLE_SCRIPT_URL}?callback=${callbackName}`;
+            script.onerror = () => {
+                delete window[callbackName];
+                document.body.removeChild(script);
+                loading.style.display = 'none';
+                error.classList.remove('hidden');
+            };
+            document.body.appendChild(script);
+        }
+
+        function startGame() {
+            const rawName = document.getElementById('playerName').value.trim();
+            const year = document.getElementById('playerYear').value.trim();
+            if (rawName.length < 2 || !year) {
+                alert("Credentials Required: Enter Name and Sector.");
+                return;
+            }
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('bottomDashboard').classList.remove('hidden');
+            
+            SCORE = 0;
+            HEALTH = 100;
+            STREAK = 0;
+            GAME_RUNNING = true;
+            SPAWNING_WAVE = false;
+            BULLETS.length = 0;
+            ENEMIES.length = 0;
+            PARTICLES.length = 0;
+            FLOATING_TEXTS.length = 0;
+            triggerWaveSequence();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function triggerWaveSequence() {
+            if (SPAWNING_WAVE) return;
+            SPAWNING_WAVE = true;
+            
+            // 1. Pick Target & Update UI immediately
+            TARGET_WORD = MASTER_VOCAB[Math.floor(Math.random() * MASTER_VOCAB.length)];
+            document.getElementById('targetDefinition').innerText = TARGET_WORD.def;
+            
+            // Visual Cue: Scan Line
+            const scanLine = document.getElementById('scanLine');
+            scanLine.classList.remove('hidden');
+            
+            // 2. Wait 2 seconds (Reading Phase)
+            setTimeout(() => {
+                scanLine.classList.add('hidden');
+                startWave(); // Spawns enemies
+                SPAWNING_WAVE = false;
+            }, 2000);
+        }
+
+        // --- WAVE SPAWN LOGIC RE-IMPLEMENTED ---
+        function startWave() {
+            ENEMIES.length = 0; // Clear old
+            
+            // Note: TARGET_WORD is already set by triggerWaveSequence
+            
+            // Pick 3 Distractors
+            let distractors = [];
+            while(distractors.length < 3) {
+                let d = MASTER_VOCAB[Math.floor(Math.random() * MASTER_VOCAB.length)];
+                if (d.word !== TARGET_WORD.word && !distractors.includes(d)) {
+                    distractors.push(d);
+                }
+            }
+
+            // Combine and Shuffle
+            const waveWords = [TARGET_WORD, ...distractors].sort(() => Math.random() - 0.5);
+
+            // Spawn 4 enemies side-by-side, centered
+            // Logic: Max gap of 180px prevents them from being too spread out on wide screens
+            // On mobile, it defaults to fitting the screen width
+            const gap = Math.min(180, canvas.width / 4); 
+            const totalWaveWidth = gap * 4;
+            const startOffset = (canvas.width - totalWaveWidth) / 2;
+
+            waveWords.forEach((wordObj, i) => {
+                ENEMIES.push({
+                    x: startOffset + (gap * i) + (gap / 2),
+                    y: -60, // Start just off screen
+                    text: wordObj.word,
+                    isTarget: wordObj.word === TARGET_WORD.word,
+                    speed: 0.8 + (SCORE / 20000), // Slowly gets faster
+                    width: 100 // approx hitbox
+                });
+            });
+        }
+
+        function shoot() {
+            BULLETS.push({ x: PLAYER_X, y: PLAYER_Y - 20, speed: 12 });
+        }
+
+        function createExplosion(x, y, color) {
+            for (let i = 0; i < 15; i++) {
+                PARTICLES.push({
+                    x, y,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8,
+                    life: 1,
+                    color
+                });
+            }
+        }
+
+        function spawnFloatingText(x, y, text, color) {
+            FLOATING_TEXTS.push({
+                x, y, text, color, life: 1.0, vy: -1
+            });
+        }
+
+        let lastShot = 0;
+
+        function update() {
+            if (!GAME_RUNNING) return;
+
+            // Player Movement
+            if (KEYS['ArrowLeft'] && PLAYER_X > 30) PLAYER_X -= 8;
+            if (KEYS['ArrowRight'] && PLAYER_X < canvas.width - 30) PLAYER_X += 8;
+            if (KEYS['Space'] && Date.now() - lastShot > 280) {
+                shoot();
+                lastShot = Date.now();
+            }
+
+            // Bullet Logic
+            for (let i = BULLETS.length - 1; i >= 0; i--) {
+                const b = BULLETS[i];
+                b.y -= b.speed;
+                if (b.y < 0) BULLETS.splice(i, 1);
+            }
+
+            // Enemy Logic (All descend together)
+            let waveCleared = true;
+            
+            for (let i = ENEMIES.length - 1; i >= 0; i--) {
+                const e = ENEMIES[i];
+                e.y += e.speed;
+                waveCleared = false; // Enemies still exist
+
+                // Collision
+                // Set font for accurate hitbox calculation
+                ctx.font = 'bold 22px Verdana, sans-serif'; 
+                
+                for (let j = BULLETS.length - 1; j >= 0; j--) {
+                    const b = BULLETS[j];
+                    const w = ctx.measureText(e.text).width + 30; // Width + padding
+                    
+                    // Hitbox check (Height approx 36px, so +/- 18)
+                    if (Math.abs(b.x - e.x) < w/2 && Math.abs(b.y - e.y) < 20) {
+                        BULLETS.splice(j, 1);
+                        
+                        if (e.isTarget) {
+                            createExplosion(e.x, e.y, '#22d3ee'); // Blue for correct
+                            SCORE += 1000;
+                            STREAK++;
+                            
+                            // STREAK BONUS LOGIC
+                            if (STREAK % 2 === 0) {
+                                const healAmount = 10;
+                                if (HEALTH < 100) {
+                                    HEALTH = Math.min(100, HEALTH + healAmount);
+                                    spawnFloatingText(PLAYER_X, PLAYER_Y - 40, "+REPAIR", "#4ade80");
+                                } else {
+                                    spawnFloatingText(PLAYER_X, PLAYER_Y - 40, "MAX HULL", "#4ade80");
+                                }
+                            } else {
+                                spawnFloatingText(e.x, e.y, "+1000", "#22d3ee");
+                            }
+
+                            // CLEAR WAVE IMMEDIATELY ON SUCCESS
+                            ENEMIES.length = 0; 
+                            triggerWaveSequence();
+                            return; 
+                        } else {
+                            createExplosion(e.x, e.y, '#ef4444'); // Red for wrong
+                            HEALTH -= 15;
+                            STREAK = 0; // Reset streak
+                            spawnFloatingText(e.x, e.y, "WRONG!", "#ef4444");
+                            ENEMIES.splice(i, 1);
+                        }
+                        break;
+                    }
+                }
+
+                // Hit Bottom (UI Line)
+                if (e && e.y > canvas.height - 100) { // Approx where UI starts
+                    if (e.isTarget) {
+                        HEALTH -= 20;
+                        STREAK = 0; // Reset streak
+                        createExplosion(e.x, e.y, '#ef4444');
+                        spawnFloatingText(PLAYER_X, PLAYER_Y - 40, "MISSED!", "#ef4444");
+                        // Failed to hit target, force new wave
+                        ENEMIES.length = 0;
+                        triggerWaveSequence();
+                        return;
+                    }
+                    ENEMIES.splice(i, 1);
+                }
+            }
+
+            // If wave cleared by shooting all distractors (rare but possible), spawn new
+            if (ENEMIES.length === 0 && GAME_RUNNING) {
+                triggerWaveSequence();
+            }
+
+            // Particles
+            for (let i = PARTICLES.length - 1; i >= 0; i--) {
+                const p = PARTICLES[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.03;
+                if (p.life <= 0) PARTICLES.splice(i, 1);
+            }
+
+            // Floating Text
+            for (let i = FLOATING_TEXTS.length - 1; i >= 0; i--) {
+                const ft = FLOATING_TEXTS[i];
+                ft.y += ft.vy;
+                ft.life -= 0.02;
+                if (ft.life <= 0) FLOATING_TEXTS.splice(i, 1);
+            }
+
+            document.getElementById('scoreDisplay').innerText = SCORE.toString().padStart(5, '0');
+            document.getElementById('healthFill').style.width = Math.max(0, HEALTH) + '%';
+            if (HEALTH <= 0) endGame();
+        }
+
+        function draw() {
+            ctx.fillStyle = '#020617';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Stars
+            ctx.fillStyle = '#1e293b';
+            for(let i=0; i<30; i++) {
+                const y = (i * 45 + Date.now()/15) % canvas.height;
+                const x = (i * 123) % canvas.width;
+                ctx.fillRect(x, y, 2, 2);
+            }
+
+            // Bullets
+            ctx.fillStyle = '#22d3ee';
+            BULLETS.forEach(b => ctx.fillRect(b.x - 2, b.y, 4, 12));
+
+            // Enemies
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            ENEMIES.forEach(e => {
+                // Config
+                ctx.font = 'bold 22px Verdana, sans-serif'; 
+                const metrics = ctx.measureText(e.text);
+                const w = metrics.width;
+                const h = 44; 
+                
+                const drawX = e.x;
+                const drawY = e.y;
+
+                // Box Background
+                ctx.fillStyle = '#0f172a'; 
+                ctx.fillRect(drawX - w/2 - 12, drawY - h/2, w + 24, h);
+
+                // Box Border - UNIFORM
+                ctx.strokeStyle = '#38bdf8'; 
+                ctx.lineWidth = 2;
+                ctx.strokeRect(drawX - w/2 - 12, drawY - h/2, w + 24, h);
+                
+                // Text - UNIFORM
+                ctx.fillStyle = '#ffffff'; 
+                
+                ctx.fillText(e.text, drawX, drawY + 2); 
+            });
+
+            // Player Ship
+            ctx.fillStyle = '#22d3ee';
+            ctx.beginPath();
+            ctx.moveTo(PLAYER_X, PLAYER_Y - 20);
+            ctx.lineTo(PLAYER_X - 18, PLAYER_Y + 12);
+            ctx.lineTo(PLAYER_X + 18, PLAYER_Y + 12);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Engine
+            ctx.fillStyle = '#0ea5e9';
+            ctx.beginPath();
+            ctx.arc(PLAYER_X, PLAYER_Y + 12, 5 + Math.random()*3, 0, Math.PI*2);
+            ctx.fill();
+
+            // Particles
+            PARTICLES.forEach(p => {
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, 3, 3);
+            });
+            ctx.globalAlpha = 1;
+
+            // Floating Text
+            FLOATING_TEXTS.forEach(ft => {
+                ctx.globalAlpha = ft.life;
+                ctx.fillStyle = ft.color;
+                ctx.font = 'bold 16px Courier New';
+                ctx.fillText(ft.text, ft.x, ft.y);
+            });
+            ctx.globalAlpha = 1;
+        }
+
+        function endGame() {
+            GAME_RUNNING = false;
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('bottomDashboard').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+            document.getElementById('finalScore').innerText = SCORE;
+            
+            // Show Fatal Info
+            document.getElementById('fatalWord').innerText = TARGET_WORD.word;
+            document.getElementById('fatalDef').innerText = TARGET_WORD.def;
+
+            const name = document.getElementById('playerName').value;
+            const year = document.getElementById('playerYear').value;
+
+            const formData = new FormData();
+            formData.append('name', name);
+            formData.append('year', year);
+            formData.append('score', SCORE);
+            
+            fetch(GOOGLE_SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                body: JSON.stringify({ name, year, score: SCORE, date: new Date().toLocaleDateString() })
+            }).then(() => {
+                document.getElementById('saveStatus').innerText = "Data Transmitted to Mainframe";
+            }).catch(() => {
+                document.getElementById('saveStatus').innerText = "Sync Interrupted";
+            });
+        }
+
+        function gameLoop() {
+            update(); draw();
+            if (GAME_RUNNING) requestAnimationFrame(gameLoop);
+        }
+
+        init();
+    </script>
+</body>
+</html>
